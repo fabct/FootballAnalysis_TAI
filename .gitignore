@@ -1,2 +1,6 @@
 venv
 node_modules
+.DS_Store
+
+#ignore all .mp4 files
+*.mp4
