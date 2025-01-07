@@ -1,0 +1,14 @@
+.custom-link {
+    color: blue; /* Couleur du lien */
+    text-decoration: underline; /* Soulignement du texte */
+    cursor: pointer; /* Curseur pointer */
+
+  }
+  
+  .custom-link:hover {
+    color: darkblue; /* Couleur au survol */
+  }
+  .marginauto{
+    text-align: center;
+    margin-top:15px;
+  }

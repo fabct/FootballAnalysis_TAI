@@ -1,0 +1,42 @@
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div *ngIf="!isOTPSend" class="card">
+                <div class="card-header">
+                    <h2 class="mb-0">Connexion</h2>
+                </div>
+                <div class="card-body">
+                    <form (ngSubmit)="onSubmit()">
+                        <div class="form-group">
+                            <label for="username">Nom d'utilisateur :</label>
+                            <input type="text" id="username" name="username" class="form-control" [(ngModel)]="username"
+                                required>
+                        </div>
+                        <div class="form-group">
+                            <label for="password">Mot de passe :</label>
+                            <input type="password" id="password" name="password" class="form-control"
+                                [(ngModel)]="password" required>
+                        </div>
+                        <div *ngIf="loginError" class="text-danger mb-3">{{ loginError }}</div>
+                        <div class="mb-3 d-flex justify-content-center">
+                            <button type="submit" class="btn btn-primary">Se connecter</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            <div *ngIf="isOTPSend" class="card mt-3">
+                <div class="card-header">
+                    <h2 class="mb-0">Saisir OTP</h2>
+                </div>
+                <div class="card-body">
+                    <div class="form-group">
+                        <label for="otp">Entrez votre OTP :</label>
+                        <input type="text" id="otp" name="otp" class="form-control" [(ngModel)]="otp" required>
+                    </div>
+                    <div *ngIf="OTPError" class="text-danger mb-3">{{ OTPError }}</div>
+                    <button (click)="SendOTP()" class="btn btn-primary">Valider OTP</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,13 @@
+<nav class="navbar  navbar-dark bg-dark">
+    <div class="container">
+        <a class="navbar-brand" (click)="deconnexion()">Football Analysis</a>
+      
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav ml-auto">
+                <li class="nav-item" *ngIf="isLogin">
+                    <a class="nav-link" (click)="deconnexion()">Déconnexion</a>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>

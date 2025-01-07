@@ -1,0 +1,29 @@
+   /* Personnalisation du style */
+   .navbar-custom {
+       padding-top: 0.5rem;
+       padding-bottom: 0.5rem;
+   }
+
+   .navbar-brand {
+       margin-right: auto;
+   }
+
+   .navbar-nav {
+       margin-left: auto;
+   }
+
+   .nav-link,
+   .navbar-brand {
+       padding: 8px 15px;
+       border: 1px solid transparent;
+       border-radius: 4px;
+       transition: all 0.3s ease;
+   }
+
+   .nav-link:hover,
+   .navbar-brand:hover {
+       background-color: rgba(255, 255, 255, 0.1);
+       color: #fff;
+       text-decoration: none;
+       cursor: pointer;
+   }

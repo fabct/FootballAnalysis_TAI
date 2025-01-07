@@ -1,0 +1,19 @@
+<app-header [isLogin]="isLogin"></app-header>
+
+<div *ngIf="isOTPSendEvent2 === false">
+  <div *ngIf="swapLoginResiter">
+    <app-register></app-register>
+    <p class="marginauto"><b>Vous possédez déjà un compte?</b> Connectez-vous en cliquant <a class="custom-link" (click)="toggleView()">ici</a></p>.
+  </div>
+</div>
+
+<div *ngIf="isLogin === false">
+  <div *ngIf="!swapLoginResiter">
+    <app-login (loginSuccess)="onLoginSuccess($event)" (isOTPSendEvent)="isOTPSendEvent($event)"></app-login>
+    <div *ngIf="isOTPSendEvent2 === false">
+    <p class="marginauto"><b>Vous n'avez pas de compte?</b> Créez-en un en cliquant <a class="custom-link" (click)="toggleView()">ici</a></p>.
+  </div>
+</div>
+</div>
+
+<app-videoupload *ngIf="isLogin ===true"></app-videoupload>
