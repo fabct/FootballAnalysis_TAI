@@ -1,6 +1,7 @@
 venv
 node_modules
 .DS_Store
+.angular
 
 #ignore all .mp4 files
 *.mp4
