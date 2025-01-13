@@ -3,9 +3,11 @@ from flask_cors import CORS
 
 import cv2
 import numpy as np
+
 import sys
 from ultralytics import YOLO
 from sklearn.cluster import KMeans
+import analysis
 
 app = Flask(__name__)
 CORS(app)
@@ -106,6 +108,54 @@ def get_kits_colors(players, grass_hsv=None, frame=None):
         kits_colors.append(kit_color)
     return kits_colors
 
+def get_ball_color(kits_colors,frame=None, grass_hsv=None):
+    """
+    Identifie la couleur de la balle en excluant la pelouse et les maillots des joueurs.
+
+    Args:
+        frame: np.array représentant l'image actuelle en BGR.
+        grass_hsv: tuple contenant la valeur HSV de la couleur de la pelouse.
+        kits_colors: Liste de np.array contenant les valeurs HSV des couleurs des maillots des joueurs.
+
+    Returns:
+        ball_color: Tuple contenant la couleur BGR estimée de la balle.
+    """
+    # Convertir l'image en espace HSV
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+    # Masque pour exclure la pelouse
+    lower_grass = np.array([grass_hsv[0, 0, 0] - 10, 40, 40])
+    upper_grass = np.array([grass_hsv[0, 0, 0] + 10, 255, 255])
+    grass_mask = cv2.inRange(hsv, lower_grass, upper_grass)
+
+    # Masque pour exclure les maillots des joueurs
+    kits_masks = []
+    if grass_hsv is None:
+        grass_color = get_grass_color(frame)
+        grass_hsv = cv2.cvtColor(np.uint8([[list(grass_color)]]), cv2.COLOR_BGR2HSV)
+
+    for kit_color in kits_colors:
+        lower_kit = np.array([kit_color[0] - 10, 40, 40])
+        upper_kit = np.array([kit_color[0] + 10, 255, 255])
+        kit_mask = cv2.inRange(hsv, lower_kit, upper_kit)
+        kits_masks.append(kit_mask)
+
+    # Combiner les masques des kits et de la pelouse
+    combined_mask = grass_mask
+    for kit_mask in kits_masks:
+        combined_mask = cv2.bitwise_or(combined_mask, kit_mask)
+
+    # Inverser le masque pour ne garder que les zones potentielles de la balle
+    ball_mask = cv2.bitwise_not(combined_mask)
+
+    # Extraire la zone d'intérêt
+    masked_img = cv2.bitwise_and(frame, frame, mask=ball_mask)
+
+    # Calculer la couleur moyenne dans les zones restantes
+    ball_color = cv2.mean(frame, mask=ball_mask)
+
+    return ball_color[:3]
+
 def get_kits_classifier(kits_colors):
     """
     Creates a K-Means classifier that can classify the kits accroding to their BGR
@@ -121,7 +171,7 @@ def get_kits_classifier(kits_colors):
             2 teams according to their color..
     """
     kits_kmeans = KMeans(n_clusters=2)
-    kits_kmeans.fit(kits_colors);
+    kits_kmeans.fit(kits_colors)
     return kits_kmeans
 
 def classify_kits(kits_classifer, kits_colors):
@@ -181,6 +231,138 @@ def get_left_team_label(players_boxes, kits_colors, kits_clf):
 
     return left_team_label
 
+def interpolate_ball_position(ball_positions, frame_idx, frame_rate):
+    ball_positions = [x.get(1,()).get('bbox') for x in ball_positions]
+    df_ball_positions = pd.DataFrame(ball_positions, columns=['x1', 'y1', 'x2', 'y2'])
+    df_ball_positions = df_ball_positions.interpolate()
+    df_ball_positions = df_ball_positions.bfill()
+
+    ball_positions = [{1: {"bbox":x}}for x in df_ball_positions.to_numpy().tolist()]
+    return ball_positions
+
+
+def annotate_ball(cap, model, width, height, output_video, box_colors, labels):
+    """
+    Annoter la balle dans chaque cadre avec un rectangle rouge en utilisant le score de confiance.
+
+    Args:
+        cap: cv2.VideoCapture object pour lire la vidéo.
+        model: Modèle YOLO pour détecter les objets dans les cadres.
+        width: Largeur des cadres de la vidéo.
+        height: Hauteur des cadres de la vidéo.
+        labels: Liste des étiquettes pour chaque classe détectée.
+        box_colors: Dictionnaire des couleurs pour annoter chaque classe.
+        output_video: Objet cv2.VideoWriter pour écrire la vidéo annotée.
+        min_confidence: Score de confiance minimum pour considérer une détection valide.
+
+    Returns:
+        None. La vidéo annotée est directement écrite dans `output_video`.
+    """
+    grass_hsv = None
+    while cap.isOpened():
+        success, frame = cap.read()
+        current_frame_idx = cap.get(cv2.CAP_PROP_POS_FRAMES)
+        if success:
+            # Write the annotated frame
+            # Run YOLOv8 inference on the frame
+            annotated_frame = cv2.resize(frame, (width, height))
+            result = model(annotated_frame, conf=0.2, verbose=False)[0]
+
+            # Get the players boxes and kit colors and ball color
+            players_imgs, players_boxes = get_players_boxes(result)
+            kits_colors = get_kits_colors(players_imgs, grass_hsv, annotated_frame)
+            ball_color = get_ball_color(kits_colors,annotated_frame, grass_hsv)
+            # Run on the first frame only
+            if current_frame_idx == 1:
+                grass_color = get_grass_color(result.orig_img)
+                grass_hsv = cv2.cvtColor(np.uint8([[list(grass_color)]]), cv2.COLOR_BGR2HSV)
+                
+
+            for box in result.boxes:
+                label = int(box.cls.numpy()[0])
+                x1, y1, x2, y2 = map(int, box.xyxy[0].numpy())
+
+                # If the box contains a player, find to which team he belongs
+                if label == 4:
+                    kit_color = get_kits_colors([result.orig_img[y1: y2, x1: x2]], grass_hsv)
+                    ball_color = get_ball_color(kits_colors,annotated_frame, grass_hsv)
+
+                    cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), box_colors[str(label)], 2)
+                    cv2.putText(annotated_frame, labels[label], (x1 - 30, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9,
+                            box_colors[str(label)], 2)
+
+
+            # Write the annotated frame
+            output_video.write(annotated_frame)
+
+        else:
+            # Break the loop if the end of the video is reached
+            print("Annotation terminé.")
+            break
+
+
+def annotate_players(cap,model,width,height,labels,box_colors,output_video):
+    kits_clf = None
+    left_team_label = 0
+    grass_hsv = None
+    while cap.isOpened():
+        # Read a frame from the video
+        success, frame = cap.read()
+
+        current_frame_idx = cap.get(cv2.CAP_PROP_POS_FRAMES)
+        if success:
+
+            # Run YOLOv8 inference on the frame
+            annotated_frame = cv2.resize(frame, (width, height))
+            result = model(annotated_frame, conf=0.2, verbose=False)[0]
+
+            # Get the players boxes and kit colors and ball color
+            players_imgs, players_boxes = get_players_boxes(result)
+            kits_colors = get_kits_colors(players_imgs, grass_hsv, annotated_frame)
+            # Run on the first frame only
+            if current_frame_idx == 1:
+                kits_clf = get_kits_classifier(kits_colors)
+                left_team_label = get_left_team_label(players_boxes, kits_colors, kits_clf)
+                grass_color = get_grass_color(result.orig_img)
+                grass_hsv = cv2.cvtColor(np.uint8([[list(grass_color)]]), cv2.COLOR_BGR2HSV)
+
+            for box in result.boxes:
+                label = int(box.cls.numpy()[0])
+                x1, y1, x2, y2 = map(int, box.xyxy[0].numpy())
+
+                # If the box contains a player, find to which team he belongs
+                if label == 0:
+                    kit_color = get_kits_colors([result.orig_img[y1: y2, x1: x2]], grass_hsv)
+                    team = classify_kits(kits_clf, kit_color)
+                    if team == left_team_label:
+                        label = 0
+                    else:
+                        label = 1
+
+                # If the box contains a Goalkeeper, find to which team he belongs
+                elif label == 1:
+                    if x1 < 0.5 * width:
+                        label = 2
+                    else:
+                        label = 3
+
+                # Increase the label by 2 because of the two add labels "Player-L", "GK-L"
+                else:
+                    label = label + 2
+
+                cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), box_colors[str(label)], 2)
+                cv2.putText(annotated_frame, labels[label], (x1 - 30, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9,
+                            box_colors[str(label)], 2)
+
+            # Write the annotated frame
+            output_video.write(annotated_frame)
+
+        else:
+            # Break the loop if the end of the video is reached
+            print("Annotation terminé.")
+            break
+
+
 def annotate_video(video_path, model):
     """
     Loads the input video and runs the object detection algorithm on its frames, finally it annotates the frame with
@@ -215,67 +397,9 @@ def annotate_video(video_path, model):
                                    30.0,
                                    (width, height))
 
-    kits_clf = None
-    left_team_label = 0
-    grass_hsv = None
-
-    while cap.isOpened():
-        # Read a frame from the video
-        success, frame = cap.read()
-
-        current_frame_idx = cap.get(cv2.CAP_PROP_POS_FRAMES)
-        if success:
-
-            # Run YOLOv8 inference on the frame
-            annotated_frame = cv2.resize(frame, (width, height))
-            result = model(annotated_frame, conf=0.5, verbose=False)[0]
-
-            # Get the players boxes and kit colors
-            players_imgs, players_boxes = get_players_boxes(result)
-            kits_colors = get_kits_colors(players_imgs, grass_hsv, annotated_frame)
-
-            # Run on the first frame only
-            if current_frame_idx == 1:
-                kits_clf = get_kits_classifier(kits_colors)
-                left_team_label = get_left_team_label(players_boxes, kits_colors, kits_clf)
-                grass_color = get_grass_color(result.orig_img)
-                grass_hsv = cv2.cvtColor(np.uint8([[list(grass_color)]]), cv2.COLOR_BGR2HSV)
-
-            for box in result.boxes:
-                label = int(box.cls.numpy()[0])
-                x1, y1, x2, y2 = map(int, box.xyxy[0].numpy())
-
-                # If the box contains a player, find to which team he belongs
-                if label == 0:
-                    kit_color = get_kits_colors([result.orig_img[y1: y2, x1: x2]], grass_hsv)
-                    team = classify_kits(kits_clf, kit_color)
-                    if team == left_team_label:
-                        label = 0
-                    else:
-                        label = 1
-
-                # If the box contains a Goalkeeper, find to which team he belongs
-                elif label == 1:
-                    if x1 < 0.5 * width:
-                        label = 2
-                    else:
-                        gk_label = 3
-
-                # Increase the label by 2 because of the two add labels "Player-L", "GK-L"
-                else:
-                    label = label + 2
-
-                cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), box_colors[str(label)], 2)
-                cv2.putText(annotated_frame, labels[label], (x1 - 30, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9,
-                            box_colors[str(label)], 2)
-
-            # Write the annotated frame
-            output_video.write(annotated_frame)
-
-        else:
-            # Break the loop if the end of the video is reached
-            print("Annotation terminé.")
-            break
+    #annotate_ball(cap, model, width, height, output_video,box_colors, labels)
+    annotate_players(cap, model, width, height, labels, box_colors, output_video)
+    
 
     cv2.destroyAllWindows()
     output_video.release()
@@ -289,21 +413,8 @@ def upload_video():
     if uploaded_file.filename != '':
         # Sauvegardez la vidéo dans un répertoire sur votre serveur
         uploaded_file.save('uploads/footballvideo.mp4')
-
-        labels = ["Player-L", "Player-R", "GK-L", "GK-R", "Ball", "Main Ref", "Side Ref", "Staff"]
-        box_colors = {
-            "0": (150, 50, 50),
-            "1": (37, 47, 150),
-            "2": (41, 248, 165),
-            "3": (166, 196, 10),
-            "4": (155, 62, 157),
-            "5": (123, 174, 213),
-            "6": (217, 89, 204),
-            "7": (22, 11, 15)
-        }
-        model = YOLO("./weights/last.pt")
         video_path = 'uploads/footballvideo.mp4'
-        annotate_video(video_path, model)
+        analysis.analyse_video(video_path)
 
         # Vous pouvez maintenant traiter la vidéo ou renvoyer une réponse si nécessaire
         return {'message': 'Video uploaded successfully'}, 200
