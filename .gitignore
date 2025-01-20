@@ -5,3 +5,5 @@ node_modules
 
 #ignore all .mp4 files
 *.mp4
+
+*.jpg

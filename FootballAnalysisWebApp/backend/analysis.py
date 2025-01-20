@@ -7,6 +7,10 @@ from camera_movement_estimator import CameraMovementEstimator
 import numpy as np
 import pickle
 import pandas as pd
+import event_analysis
+import cv2
+import os
+
 
 def detect_game_pauses(tracks, ball_key='ball', threshold_seconds=0.5, fps=30):
     """
@@ -131,10 +135,75 @@ def analyse_video(video_path):
     for start, end in pauses:
         duration = (end - start) / 30  # Convertir les frames en secondes
         print(f"Arrêt de jeu entre les frames {start} et {end} (durée : {duration:.2f} secondes)")
+    
+       # Display and save paused frames
+    print("Affichage des frames en pause...")
+    display_paused_frames(video_path, pauses, video_frames, tracks, output_folder="output_frames")
+    print("Affichage terminé.")
 
-    # Draw output
+
     output_video_frames = tracker.draw_annotations(video_frames, tracks, team_ball_control)
     output_video_frames = camera_movement_estimator.draw_camera_movement(output_video_frames, camera_movement_per_frame)
-
     # Save the video with the bounding boxes
     save_video(output_video_frames, 'output/video_output.mp4', height, width)
+
+
+
+def display_paused_frames(video_path, pauses,video_frames, tracks,  output_folder="output_frames", show_frames=True):
+    """
+    Affiche et enregistre les frames où un arrêt de jeu est détecté.
+    Désactive cv2.imshow() si aucun affichage graphique n'est disponible.
+    """
+    # Créer le dossier de sortie s'il n'existe pas
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+        print(f"✅ Dossier de sortie créé : {output_folder}")
+
+    # Ouvrir la vidéo
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        print(f"❌ Erreur : Impossible d'ouvrir la vidéo à l'emplacement {video_path}")
+        return
+
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps = int(cap.get(cv2.CAP_PROP_FPS))
+    print(f"📹 Vidéo chargée : {frame_count} frames, {fps} FPS")
+
+    # Vérifier si l'affichage graphique est disponible (désactiver imshow si nécessaire)
+    no_display = os.environ.get("DISPLAY") is None  # Vérifie si DISPLAY est défini (Linux/macOS)
+    
+    # Parcourir les pauses détectées
+    for i, (start, end) in enumerate(pauses):
+        print(f"🔍 Traitement de la pause {i} : frames {start} à {end}")
+        for frame_num in range(start, min(end + 1, frame_count)):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+            ret, frame = cap.read()
+            if not ret:
+                print(f"❌ Erreur : Impossible de lire la frame {frame_num}")
+                continue
+
+            # Enregistrer la frame
+            frame_path = os.path.join(output_folder, f"pause_{i}_frame_{frame_num}.jpg")
+            cv2.imwrite(frame_path, frame)
+            print(f"✅ Image enregistrée : {frame_path}")
+
+            # Afficher la frame uniquement si un affichage est disponible
+            if not no_display and show_frames:
+                cv2.imshow(f"Pause {i} - Frame {frame_num}", frame)
+                cv2.waitKey(300)
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+
+
+    # Event detection
+    events_df = event_analysis.parse_xml_results('Annotations_AtomicEvents_Results.xml')
+    ground_df = event_analysis.parse_ground_truth('Annotations_AtomicEvents_Results.xml')
+
+
+ 
+
+
+
+    
