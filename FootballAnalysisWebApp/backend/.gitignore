@@ -1,0 +1,10 @@
+__pycache__
+ball_tracking/__pycache__
+camera_movement_estimator/__pycache__
+player_ball_assigner/__pycache__
+*pkl
+team_assigner/__pycache__
+tracker/__pycache__
+utils/__pycache__
+weights/*
+

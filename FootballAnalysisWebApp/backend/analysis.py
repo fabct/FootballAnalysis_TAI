@@ -1,10 +1,8 @@
-from ultralytics import YOLO
 from utils import read_video, save_video
-from tracker import Tracker
 from team_assigner import TeamAssigner
 from player_ball_assigner import PlayerBallAssigner
 from camera_movement_estimator import CameraMovementEstimator
-from tracker import BallTracker
+from tracker import BallTracker, FieldTracker, Tracker
 import numpy as np
 import pickle
 import pandas as pd
@@ -94,12 +92,18 @@ def analyse_video(video_path):
 
     # Create a tracker object
     tracker = Tracker('weights/best.pt')
-    tracks = tracker.get_object_tracks(video_frames, read_from_strub=True, stub_path='stubs/' + video_name + '_track_stub.pkl')
+    # model line tracking football-field-detection-f07vi/15
+    tracks = tracker.get_object_tracks(video_frames, read_from_strub=True, stub_path='stubs/'+video_name+'_track_stub.pkl')
     tracker.add_position_to_tracks(tracks)
-
-    camera_movement_estimator = CameraMovementEstimator(video_frames[0])
-    camera_movement_per_frame = camera_movement_estimator.get_camera_movement(video_frames, read_from_stub=True, stub_path='stubs/' + video_name + '_camera_movement_stub.pkl')
-    camera_movement_estimator.add_adjust_positions_to_tracks(tracks, camera_movement_per_frame)
+    field_tracker = FieldTracker('weights/best_field-detector.pt')
+    field_tracks = field_tracker.track_field_lines(video_frames,read_from_strub=True,stub_path='stubs/'+video_name+'_field_track_stub.pkl')
+    print(field_tracks)
+    # camera movement estimation
+    # Interpolate Ball Positions
+    #tracks["ball"] = interpolate_ball_positions(tracks["ball"])
+    #camera_movement_estimator = CameraMovementEstimator(video_frames[0])
+    #camera_movement_estimator.add_adjust_positions_to_tracks(tracks, camera_movement_per_frame)
+    #camera_movement_per_frame = camera_movement_estimator.get_camera_movement(video_frames, read_from_stub=True, stub_path='stubs/'+video_name+'_camera_movement_stub.pkl')
     ball_tracker = BallTracker()
     tracks["ball"] = ball_tracker.interpolate_ball_positions(tracks["ball"])
     tracks["ball"] = ball_tracker.interpolate_ball_positions_cubic_spline(tracks["ball"])
@@ -180,6 +184,8 @@ def analyse_video(video_path):
     print("Affichage terminé.")
 
 
+    #Draw output
+    output_video_frames = field_tracker.annotate_field_lines(video_frames, field_tracks['field_lines'])
     output_video_frames = tracker.draw_annotations(video_frames, tracks, team_ball_control, pauses)
     output_video_frames = camera_movement_estimator.draw_camera_movement(output_video_frames, camera_movement_per_frame)
     # Save the video with the bounding boxes
