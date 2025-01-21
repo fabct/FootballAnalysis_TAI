@@ -7,9 +7,8 @@ import { AuthGuard } from './auth.guard';
 
 import { AppComponent } from './app.component';
 const routes: Routes = [
-  { path: '', component: LoginComponent },
-  { path: 'videodownload', component: VideodownloadComponent, canActivate: [AuthGuard] },
-  { path: 'videoupload', component: VideouploadComponent, canActivate: [AuthGuard] },
+  { path: 'videodownload', component: VideodownloadComponent},
+  { path: '', component: VideouploadComponent},
 ];
 
 @NgModule({
