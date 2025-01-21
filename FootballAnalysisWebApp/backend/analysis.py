@@ -19,12 +19,12 @@ def analyse_video(video_path):
     tracker.add_position_to_tracks(tracks)
     field_tracker = FieldTracker('weights/best_field-detector.pt')
     field_tracks = field_tracker.track_field_lines(video_frames,read_from_strub=True,stub_path='stubs/'+video_name+'_field_track_stub.pkl')
+    print(field_tracks)
     # camera movement estimation
     #camera_movement_estimator = CameraMovementEstimator(video_frames[0])
     #camera_movement_per_frame = camera_movement_estimator.get_camera_movement(video_frames, read_from_stub=True, stub_path='stubs/'+video_name+'_camera_movement_stub.pkl')
     #camera_movement_estimator.add_adjust_positions_to_tracks(tracks, camera_movement_per_frame)
     # Interpolate Ball Positions
-    print(tracks["ball"])
     #tracks["ball"] = interpolate_ball_positions(tracks["ball"])
     ball_tracker = BallTracker()
     #ball_tracker.train_rnn(tracks["ball"], seq_length=20)  # Entraîner le modèle avec les données historiques
