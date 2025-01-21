@@ -89,7 +89,7 @@ class Tracker:
 
         return tracks
     
-    def draw_annotations(self,video_frames,tracks,team_ball_control):
+    def draw_annotations(self, video_frames, tracks, team_ball_control, pauses):
         output_video_frames = []
         for frame_num, frame in enumerate(video_frames):
             frame = frame.copy()
@@ -100,28 +100,37 @@ class Tracker:
 
             # Draw players
             for track_id, player in player_dist.items():
-                color = player.get('team_color', (0,0,255))
+                color = player.get('team_color', (0, 0, 255))
                 frame = self.draw_ellipse(frame, player['bbox'], color, track_id)
 
                 if player.get('has_ball', False):
-                    frame = self.draw_ellipse(frame, player['bbox'], (0,255,0), track_id)
+                    frame = self.draw_ellipse(frame, player['bbox'], (0, 255, 0), track_id)
 
             for _, referee in referee_dict.items():
-                frame = self.draw_ellipse(frame, referee['bbox'], (0,255,255))
+                frame = self.draw_ellipse(frame, referee['bbox'], (0, 255, 255))
 
             for _, ball in ball_dict.items():
-                frame = self.draw_rectangle(frame, ball['bbox'], (255,0,0),'ball')
+                frame = self.draw_rectangle(frame, ball['bbox'], (255, 0, 0), 'ball')
 
-            frame = self.draw_team_ball_control(frame,frame_num,team_ball_control)
+            frame = self.draw_team_ball_control(frame, frame_num, team_ball_control, pauses)
+
+            
 
             output_video_frames.append(frame)
         
         return output_video_frames
+
     
-    def draw_team_ball_control(self,frame,frame_num,team_ball_control):
+    def draw_team_ball_control(self,frame,frame_num,team_ball_control, pauses):
         # Draw a semi-transparent rectaggle 
+        frame_height, frame_width, _ = frame.shape
+        rect_x1 = int(frame_width * 0.05)
+        rect_y1 = int(frame_height * 0.75)
+        rect_x2 = int(frame_width * 0.35)
+        rect_y2 = int(frame_height * 0.95)
+        
         overlay = frame.copy()
-        cv2.rectangle(overlay, (1350, 850), (1900,970), (255,255,255), -1 )
+        cv2.rectangle(overlay, (rect_x1, rect_y1), (rect_x2, rect_y2), (255, 255, 255), -1)
         alpha = 0.4
         cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
 
@@ -131,9 +140,17 @@ class Tracker:
         team_2_num_frames = team_ball_control_till_frame[team_ball_control_till_frame==2].shape[0]
         team_1 = team_1_num_frames/(team_1_num_frames+team_2_num_frames)
         team_2 = team_2_num_frames/(team_1_num_frames+team_2_num_frames)
+        text_x = rect_x1 + 20
+        text_y = rect_y1 + 40
+        cv2.putText(frame, f"Team 1 Ball Control: {team_1*100:.2f}%", (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 3)
+        cv2.putText(frame, f"Team 2 Ball Control: {team_2*100:.2f}%", (text_x, text_y + 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 3)
 
-        cv2.putText(frame, f"Team 1 Ball Control: {team_1*100:.2f}%",(1400,900), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 3)
-        cv2.putText(frame, f"Team 2 Ball Control: {team_2*100:.2f}%",(1400,950), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 3)
+        # Vérifier si la frame fait partie d'un arrêt de jeu
+        for start, end in pauses:
+            if start <= frame_num <= end:
+                
+                cv2.putText(frame, "Stoppage in play", (text_x, text_y + 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 3)
+                break  # Éviter d'écrire plusieurs fois si la frame appartient à plusieurs pauses
 
         return frame
 

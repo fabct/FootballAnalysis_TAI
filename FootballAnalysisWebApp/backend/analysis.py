@@ -142,7 +142,7 @@ def analyse_video(video_path):
     print("Affichage terminé.")
 
 
-    output_video_frames = tracker.draw_annotations(video_frames, tracks, team_ball_control)
+    output_video_frames = tracker.draw_annotations(video_frames, tracks, team_ball_control, pauses)
     output_video_frames = camera_movement_estimator.draw_camera_movement(output_video_frames, camera_movement_per_frame)
     # Save the video with the bounding boxes
     save_video(output_video_frames, 'output/video_output.mp4', height, width)
