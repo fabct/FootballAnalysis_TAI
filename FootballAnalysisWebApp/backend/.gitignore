@@ -6,3 +6,5 @@ player_ball_assigner/__pycache__
 team_assigner/__pycache__
 tracker/__pycache__
 utils/__pycache__
+weights/*
+
