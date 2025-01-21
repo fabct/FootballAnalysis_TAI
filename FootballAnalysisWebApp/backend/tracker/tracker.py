@@ -1,5 +1,6 @@
 from ultralytics import YOLO
 import supervision as sv
+from pykalman import KalmanFilter
 import pickle
 import os
 import cv2
@@ -180,76 +181,7 @@ class Tracker:
             lineType=cv2.LINE_4
         )
 
-        rectangle_width = 40
-        rectangle_height=20
-        x1_rect = x_center - rectangle_width//2
-        x2_rect = x_center + rectangle_width//2
-        y1_rect = (y2- rectangle_height//2) +15
-        y2_rect = (y2+ rectangle_height//2) +15
-
-        if track_id is not None:
-            cv2.rectangle(frame,
-                          (int(x1_rect),int(y1_rect) ),
-                          (int(x2_rect),int(y2_rect)),
-                          color,
-                          cv2.FILLED)
-            
-            x1_text = x1_rect+12
-            if track_id > 99:
-                x1_text -=10
-            
-            cv2.putText(
-                frame,
-                f"{track_id}",
-                (int(x1_text),int(y1_rect+15)),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (0,0,0),
-                2
-            )
-
         return frame
-    
-   
-        # Extraire les coordonnées des boîtes englobantes
-        ball_positions = [x.get(1, {}).get('bbox', []) for x in ball_positions]
-        df_ball_positions = pd.DataFrame(ball_positions, columns=['x1', 'y1', 'x2', 'y2'])
-
-        # Calculer les centres des boîtes
-        df_ball_positions['cx'] = (df_ball_positions['x1'] + df_ball_positions['x2']) / 2
-        df_ball_positions['cy'] = (df_ball_positions['y1'] + df_ball_positions['y2']) / 2
-        df_ball_positions['w'] = df_ball_positions['x2'] - df_ball_positions['x1']
-        df_ball_positions['h'] = df_ball_positions['y2'] - df_ball_positions['y1']
-
-        # Ajouter une dimension temporelle (index des frames)
-        df_ball_positions['frame'] = np.arange(len(df_ball_positions))
-
-        # Interpoler les positions manquantes avec CubicSpline
-        interpolated_positions = {}
-        for col in ['cx', 'cy', 'w', 'h']:
-            valid_data = df_ball_positions[col].notna()
-            frames_valid = df_ball_positions.loc[valid_data, 'frame']
-            values_valid = df_ball_positions.loc[valid_data, col]
-
-            if len(frames_valid) >= 3:  # CubicSpline nécessite au moins 3 points
-                spline = CubicSpline(frames_valid, values_valid)
-                interpolated_positions[col] = spline(df_ball_positions['frame'])
-            else:  # Si pas assez de points pour une spline, utiliser une interpolation linéaire
-                interpolated_positions[col] = df_ball_positions[col].interpolate(method='linear').bfill()
-
-        # Reconstruire les boîtes englobantes après interpolation
-        df_ball_positions['cx'] = interpolated_positions['cx']
-        df_ball_positions['cy'] = interpolated_positions['cy']
-        df_ball_positions['w'] = interpolated_positions['w']
-        df_ball_positions['h'] = interpolated_positions['h']
-        df_ball_positions['x1'] = df_ball_positions['cx'] - df_ball_positions['w'] / 2
-        df_ball_positions['y1'] = df_ball_positions['cy'] - df_ball_positions['h'] / 2
-        df_ball_positions['x2'] = df_ball_positions['cx'] + df_ball_positions['w'] / 2
-        df_ball_positions['y2'] = df_ball_positions['cy'] + df_ball_positions['h'] / 2
-
-        # Retourner le format original des positions
-        ball_positions = [{1: {"bbox": row[['x1', 'y1', 'x2', 'y2']].tolist()}} for _, row in df_ball_positions.iterrows()]
-        return ball_positions
     
     def interpolate_ball_positions_rnn(self, ball_positions):
         # Extraire les coordonnées des boîtes englobantes
@@ -354,3 +286,20 @@ class Tracker:
                     else:
                         position = get_foot_position(bbox)
                     tracks[object][frame_num][track_id]['position'] = position
+
+    def apply_kalman_filter(self, data):
+        # Assurez-vous que 'data' est un tableau NumPy
+        ball_positions = [x.get(1, {}).get("bbox", []) for x in data]
+        df = pd.DataFrame(ball_positions, columns=["x1", "y1", "x2", "y2"])
+
+        # Créez un Kalman Filter avec l'état initial approprié
+        kf = KalmanFilter(initial_state_mean=np.zeros(df.shape[1]),
+                      n_dim_obs=df.shape[1])
+    
+        # Appliquez le filtre Kalman
+        smoothed_state_means, _ = kf.smooth(df)
+    
+        df["x1"], df["y1"], df["x2"], df["y2"] = smoothed_state_means[:, 0], smoothed_state_means[:, 1], smoothed_state_means[:, 2], smoothed_state_means[:, 3]
+
+        # Retourner les positions mises à jour
+        return [{1: {"bbox": row[["x1", "y1", "x2", "y2"]].tolist()}} for _, row in df.iterrows()]
