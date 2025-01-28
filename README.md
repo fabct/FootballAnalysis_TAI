@@ -1,7 +1,3 @@
-Voici la version réécrite en français, avec quelques icônes et améliorations pour rendre le README plus agréable :
-
----
-
 # ⚽ Vue d'Ensemble du Projet
 
 Ce projet a pour objectif d'analyser des données footballistiques afin de fournir des insights et des prédictions. Il comprend la collecte de données, le prétraitement, l'analyse et la visualisation.
